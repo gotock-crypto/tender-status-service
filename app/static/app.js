@@ -1,5 +1,6 @@
 const $ = (id) => document.getElementById(id);
 const STATUS_LABELS = { draft: "Черновик", active: "Активен", won: "Выигран", lost: "Проигран" };
+const ALLOWED_TRANSITIONS = { draft: ["active"], active: ["won", "lost"], won: [], lost: [] };
 const state = { tenders: [], currentTender: null };
 
 function esc(value) {
@@ -69,12 +70,16 @@ async function createTender(event) {
 async function openDetails(id) {
   try {
     const tender = await api(`/api/v1/tenders/${id}`); state.currentTender = tender;
+    const allowedStatuses = ALLOWED_TRANSITIONS[tender.status] || [];
+    const statusControl = allowedStatuses.length
+      ? `<div class="two"><label>Новый статус<select name="status">${allowedStatuses.map((key)=>`<option value="${key}">${STATUS_LABELS[key]}</option>`).join("")}</select></label><label>Кто изменил<input name="changed_by" required maxlength="200" placeholder="Иван Иванов"></label></div><label>Причина<textarea name="reason" required maxlength="2000" placeholder="Укажите основание изменения статуса"></textarea></label><button type="submit" class="btn primary">Сохранить статус</button>`
+      : `<div class="terminal-state"><strong>Статус завершён</strong><span>Тендер находится в финальном состоянии и больше не может быть переведён в другой статус.</span></div>`;
     showModal(`<div class="modal-title"><div><span class="badge ${tender.status}">${STATUS_LABELS[tender.status]}</span><h2>${esc(tender.title)}</h2><div class="muted">${esc(tender.customer)} · ${esc(tender.contract_number || "Без номера")}</div></div><button type="button" class="close" data-action="close">×</button></div>
       <div class="detail-grid"><div><span>Начальная цена</span><b>${money(tender.initial_price)}</b></div><div><span>Создан</span><b>${date(tender.created_at)}</b></div><div><span>Обновлён</span><b>${date(tender.updated_at)}</b></div></div>
       <div class="detail-actions"><button class="btn secondary" data-action="edit" data-id="${tender.id}">✎ Редактировать</button><button class="btn danger" data-action="delete" data-id="${tender.id}">Удалить</button></div>
-      <div class="section"><h3>Изменить статус</h3><form id="status-form" class="form"><div class="two"><label>Новый статус<select name="status">${Object.entries(STATUS_LABELS).filter(([key]) => key !== tender.status).map(([key,label])=>`<option value="${key}">${label}</option>`).join("")}</select></label><label>Кто изменил<input name="changed_by" required maxlength="200" placeholder="Иван Иванов"></label></div><label>Причина<textarea name="reason" required maxlength="2000" placeholder="Укажите основание изменения статуса"></textarea></label><button type="submit" class="btn primary">Сохранить статус</button></form></div>
+      <div class="section"><h3>Изменить статус</h3><form id="status-form" class="form">${statusControl}</form></div>
       <div class="section"><h3>История статусов</h3><div class="timeline">${tender.history.length ? tender.history.map((item)=>`<div class="event"><span class="dot"></span><div><b>${STATUS_LABELS[item.old_status]} → ${STATUS_LABELS[item.new_status]}</b><p>${esc(item.reason)}</p><small>${esc(item.changed_by)} · ${new Date(item.changed_at).toLocaleString("ru-RU")}</small></div></div>`).join("") : "<p class='muted'>История изменений пока пуста.</p>"}</div></div>`);
-    $("status-form").addEventListener("submit", (event)=>changeStatus(event,tender.id));
+    if (allowedStatuses.length) $("status-form").addEventListener("submit", (event)=>changeStatus(event,tender.id));
   } catch(error) { toast(error.message,"error"); }
 }
 
