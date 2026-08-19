@@ -1,7 +1,14 @@
-def test_status_machine_allows_manual_changes():
-    from app.services.tender_service import ALLOWED_TRANSITIONS
-    from app.models.tender import TenderStatus
+from app.models.tender import TenderStatus
+from app.services.tender_service import ALLOWED_TRANSITIONS
 
-    for status in TenderStatus:
-        assert status not in ALLOWED_TRANSITIONS[status]
-        assert set(ALLOWED_TRANSITIONS[status]) == set(TenderStatus) - {status}
+
+def test_status_machine_has_explicit_lifecycle():
+    assert ALLOWED_TRANSITIONS[TenderStatus.DRAFT] == {TenderStatus.ACTIVE}
+    assert ALLOWED_TRANSITIONS[TenderStatus.ACTIVE] == {TenderStatus.WON, TenderStatus.LOST}
+    assert ALLOWED_TRANSITIONS[TenderStatus.WON] == set()
+    assert ALLOWED_TRANSITIONS[TenderStatus.LOST] == set()
+
+
+def test_terminal_statuses_have_no_outgoing_transitions():
+    assert ALLOWED_TRANSITIONS[TenderStatus.WON] == set()
+    assert ALLOWED_TRANSITIONS[TenderStatus.LOST] == set()
