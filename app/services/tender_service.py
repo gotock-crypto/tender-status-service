@@ -7,8 +7,13 @@ from app.models.tender import Tender, TenderStatus, TenderStatusHistory
 from app.schemas.tender import StatusUpdate, TenderCreate
 
 
+# A tender follows a small, explicit lifecycle. Terminal statuses cannot be
+# reopened, which prevents contradictory audit histories such as WON -> ACTIVE.
 ALLOWED_TRANSITIONS = {
-    status: set(TenderStatus) - {status} for status in TenderStatus
+    TenderStatus.DRAFT: {TenderStatus.ACTIVE},
+    TenderStatus.ACTIVE: {TenderStatus.WON, TenderStatus.LOST},
+    TenderStatus.WON: set(),
+    TenderStatus.LOST: set(),
 }
 
 

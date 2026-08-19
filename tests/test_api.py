@@ -42,6 +42,14 @@ def create():
     return response.json()["id"]
 
 
+def change_status(tender_id: int, next_status: str):
+    return client.patch(f"/api/v1/tenders/{tender_id}/status", json={
+        "status": next_status,
+        "changed_by": "ivan",
+        "reason": f"Переход в {next_status}",
+    })
+
+
 def test_create_starts_as_draft():
     data = client.post("/api/v1/tenders", json={"title": "Тест", "customer": "Заказчик", "initial_price": 1000}).json()
     assert data["status"] == "draft"
@@ -60,27 +68,35 @@ def test_crud():
 
 def test_status_change_creates_history():
     tender_id = create()
-    response = client.patch(f"/api/v1/tenders/{tender_id}/status", json={"status":"won","changed_by":"ivan","reason":"Ручная корректировка"})
+    assert change_status(tender_id, "active").status_code == 200
+    response = change_status(tender_id, "won")
     assert response.status_code == 200
     history = client.get(f"/api/v1/tenders/{tender_id}/history").json()
-    assert history[0]["old_status"] == "draft"
+    assert history[0]["old_status"] == "active"
     assert history[0]["new_status"] == "won"
     assert history[0]["changed_by"] == "ivan"
 
 
-def test_status_can_change_to_any_other_status():
+def test_status_lifecycle():
     tender_id = create()
-    for next_status in ["active", "lost", "active", "won"]:
-        response = client.patch(f"/api/v1/tenders/{tender_id}/status", json={
-            "status": next_status, "changed_by": "ivan", "reason": f"Переход в {next_status}"
-        })
-        assert response.status_code == 200
-        assert response.json()["status"] == next_status
+    assert change_status(tender_id, "active").status_code == 200
+    assert change_status(tender_id, "won").status_code == 200
+
+
+def test_invalid_status_transition_is_rejected():
+    tender_id = create()
+    assert change_status(tender_id, "won").status_code == 409
+    assert change_status(tender_id, "lost").status_code == 409
+
+    assert change_status(tender_id, "active").status_code == 200
+    assert change_status(tender_id, "won").status_code == 200
+    assert change_status(tender_id, "active").status_code == 409
+    assert change_status(tender_id, "lost").status_code == 409
 
 
 def test_same_status_is_rejected():
     tender_id = create()
-    response = client.patch(f"/api/v1/tenders/{tender_id}/status", json={"status":"draft","changed_by":"ivan","reason":"same"})
+    response = change_status(tender_id, "draft")
     assert response.status_code == 409
 
 
