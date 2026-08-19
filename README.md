@@ -1,77 +1,138 @@
-# TenderFlow — Tender Status Tracking Service
+# TenderFlow — сервис отслеживания статусов тендеров
 
-FastAPI microservice for managing tenders with CRUD operations, controlled status changes, and an auditable status history.
+Тестовое задание №6: backend-приложение на Python/FastAPI для управления тендерами, изменения их статусов и ведения аудита всех изменений.
 
-## Test task #6
+## Что реализовано
 
-The service implements:
-- tender creation;
-- tender editing and deletion;
-- tender status changes: `draft` / `active` / `won` / `lost`;
-- explicit status lifecycle: `draft -> active -> won|lost`;
-- terminal statuses (`won`, `lost`) cannot be reopened;
-- status change audit: who, when and why;
-- separate `tender_status_history` table;
-- REST API + responsive web UI;
-- SQLite by default for a zero-infrastructure local run;
-- PostgreSQL supported through `DATABASE_URL`;
-- Alembic migrations;
-- automated tests.
+Сервис поддерживает:
 
-## Architecture
+- создание тендера;
+- просмотр списка и карточки тендера;
+- редактирование тендера;
+- удаление тендера;
+- изменение статуса;
+- статусы `Черновик` / `Активен` / `Выигран` / `Проигран`;
+- контролируемый жизненный цикл статусов;
+- отдельную таблицу `tender_status_history` для истории изменений;
+- аудит: кто изменил, когда и почему;
+- REST API;
+- адаптивный веб-интерфейс;
+- поиск и фильтрацию;
+- SQLite по умолчанию для простого локального запуска;
+- поддержку PostgreSQL через `DATABASE_URL`;
+- миграции Alembic;
+- автоматические тесты.
+
+## Логика решения
+
+Каждый тендер хранится в таблице `tenders`. Каждое изменение статуса одновременно записывается в `tender_status_history`.
+
+Изменение статуса выполняется одной транзакцией: сначала сервис проверяет допустимость перехода, затем изменяет текущий статус и создаёт запись аудита. Если операция не выполнена, ни одно из двух изменений не сохраняется.
+
+Аутентификация намеренно вынесена за рамки тестового задания. Поле `changed_by` передаётся API-клиентом; в production его можно заменить на идентификатор пользователя из системы аутентификации.
+
+## Алгоритм изменения статуса
 
 ```text
-Browser / REST client
-        |
-        v
-     FastAPI
-        |
-        v
- Service layer
-        |
-        v
- SQLAlchemy ORM
-        |
-   +----+----+
-   |         |
- tenders  tender_status_history
-   |         |
-   +----+----+
-        |
-        v
+Запрос на изменение статуса
+          |
+          v
+Найти тендер
+          |
+          v
+Проверить допустимость перехода
+          |
+       +--+--+
+       |     |
+     нет     да
+       |     |
+       v     v
+    HTTP 409  Изменить статус
+                 |
+                 v
+          Записать аудит
+          кто / когда / почему
+                 |
+                 v
+             COMMIT
+```
+
+## Жизненный цикл статуса
+
+```text
+Черновик
+    |
+    v
+ Активен
+  /    \
+ v      v
+Выигран  Проигран
+```
+
+Допустимые переходы:
+
+- `Черновик → Активен`;
+- `Активен → Выигран`;
+- `Активен → Проигран`.
+
+`Выигран` и `Проигран` являются конечными состояниями. Нельзя перейти, например, из `Черновик` сразу в `Выигран`, вернуть `Выигран` в `Активен` или повторно установить тот же статус.
+
+При недопустимом переходе API возвращает `409 Conflict`.
+
+## Архитектура
+
+```text
+Браузер / REST-клиент
+          |
+          v
+       FastAPI
+          |
+          v
+   Сервисный слой
+          |
+          v
+    SQLAlchemy ORM
+          |
+     +----+----+
+     |         |
+  tenders  tender_status_history
+     |         |
+     +----+----+
+          |
+          v
    SQLite / PostgreSQL
 ```
 
-Status changes and audit records are committed in a single database transaction. The service layer validates every transition before writing either change.
+## Структура данных
 
-Authentication is intentionally outside the test task. `changed_by` is supplied by the API client; a production system can replace it with the authenticated user identity.
+### `tenders`
 
-## Status lifecycle
+Основная таблица тендеров: идентификатор, номер, название, заказчик, сумма, срок выполнения, текущий статус и даты создания/обновления.
 
-```text
-Черновик (draft)
-       |
-       v
-Активен (active)
-    /       \
-   v         v
-Выигран    Проигран
- (won)      (lost)
-```
+### `tender_status_history`
 
-The API rejects invalid transitions with HTTP `409 Conflict`, for example `draft -> won`, `won -> active`, or `lost -> draft`.
+Отдельная таблица аудита. Для каждого изменения сохраняются:
+
+- тендер;
+- предыдущий статус;
+- новый статус;
+- кто изменил (`changed_by`);
+- причина (`reason`);
+- дата и время (`changed_at`).
+
+Связь с тендером выполняется через внешний ключ с каскадным удалением.
 
 ## API
 
-- `GET /api/v1/tenders`
-- `POST /api/v1/tenders`
-- `GET /api/v1/tenders/{id}`
-- `PUT /api/v1/tenders/{id}`
-- `DELETE /api/v1/tenders/{id}`
-- `PATCH /api/v1/tenders/{id}/status`
-- `GET /api/v1/tenders/{id}/history`
+- `GET /api/v1/tenders` — список тендеров;
+- `POST /api/v1/tenders` — создать тендер;
+- `GET /api/v1/tenders/{id}` — получить тендер;
+- `PUT /api/v1/tenders/{id}` — изменить тендер;
+- `DELETE /api/v1/tenders/{id}` — удалить тендер;
+- `PATCH /api/v1/tenders/{id}/status` — изменить статус;
+- `GET /api/v1/tenders/{id}/history` — получить историю изменений.
 
-### Change status example
+### Пример изменения статуса
 
 ```json
 {
@@ -81,7 +142,24 @@ The API rejects invalid transitions with HTTP `409 Conflict`, for example `draft
 }
 ```
 
-## Local Windows run
+## Веб-интерфейс
+
+Интерфейс позволяет:
+
+- просматривать таблицу тендеров;
+- искать и фильтровать тендеры;
+- создавать тендеры;
+- редактировать и удалять тендеры;
+- вручную изменять статус;
+- видеть допустимые следующие статусы;
+- просматривать историю изменений в виде timeline;
+- обновлять данные без перезагрузки страницы.
+
+При первом запуске пустая локальная база заполняется демонстрационными тендерами, чтобы интерфейс можно было сразу проверить.
+
+## Локальный запуск в Windows
+
+Docker для локального запуска не требуется: по умолчанию используется SQLite.
 
 ```powershell
 python -m venv .venv
@@ -93,21 +171,22 @@ pytest -q
 python -m uvicorn app.main:app --reload
 ```
 
-Open:
-- http://127.0.0.1:8000 — web UI
-- http://127.0.0.1:8000/docs — Swagger
+После запуска:
 
-The UI supports create, edit, delete, search/filter, manual status changes, audit timeline, and refresh. Status controls show only valid next states; finished tenders are displayed as terminal.
+- http://127.0.0.1:8000 — веб-интерфейс;
+- http://127.0.0.1:8000/docs — Swagger UI.
 
 ## PostgreSQL
 
-Set for example:
+PostgreSQL поддерживается через переменную `DATABASE_URL`.
+
+Пример:
 
 ```env
 DATABASE_URL=postgresql+psycopg://postgres:password@localhost:5432/tender_status
 ```
 
-Then run:
+После изменения конфигурации:
 
 ```powershell
 alembic upgrade head
@@ -116,16 +195,32 @@ python -m uvicorn app.main:app --reload
 
 ## Docker
 
-Docker configuration is included for users who want a PostgreSQL container, but Docker is not required for the default local SQLite run.
+В проекте также есть конфигурация Docker Compose для запуска приложения вместе с PostgreSQL. Docker не требуется для стандартного локального сценария с SQLite.
 
 ```powershell
 docker compose up --build
 ```
 
-## Tests
+## Тесты
 
-The test suite covers creation/default draft status, full CRUD, valid and invalid status transitions, audit history with who/when/why, same-status rejection, 404 handling, and UI/static assets.
+Тестовый набор покрывает:
 
-## License
+- создание тендера и статус по умолчанию;
+- полный CRUD;
+- допустимые переходы статусов;
+- недопустимые переходы;
+- конечные состояния;
+- историю с полями кто/когда/почему;
+- запрет повторной установки текущего статуса;
+- обработку `404`;
+- UI и статические файлы.
 
-MIT
+Запуск:
+
+```powershell
+pytest -q
+```
+
+## Лицензия
+
+Проект распространяется по лицензии **MIT**. Полный текст лицензии находится в файле `LICENSE`.
