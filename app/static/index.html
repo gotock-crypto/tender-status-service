@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TenderFlow — управление тендерами</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar"><div class="brand"><div class="brand-mark">T</div><div><strong>TenderFlow</strong><span>Управление тендерами</span></div></div><div class="top-actions"><span class="live"><i></i> API online</span><a href="/docs" target="_blank">Swagger ↗</a></div></header>
+<main class="container">
+<section class="hero"><div><div class="eyebrow">TENDER MANAGEMENT · AUDIT</div><h1>Контроль тендеров</h1><p>Единый список закупок, быстрый контроль статусов и прозрачная история изменений.</p></div><button class="btn primary" id="create-btn">＋ Новый тендер</button></section>
+<section class="stats" id="stats"></section>
+<section class="toolbar"><div class="search"><span>⌕</span><input id="search" placeholder="Поиск по тендеру, заказчику или номеру"></div><select id="filter"><option value="">Все статусы</option><option value="draft">Черновик</option><option value="active">Активен</option><option value="won">Выигран</option><option value="lost">Проигран</option></select><button class="btn ghost" id="refresh">↻ Обновить</button></section>
+<section class="table-card"><div class="table-head"><div><h2>Тендеры</h2><span id="count-label">0 записей</span></div></div><div class="table-wrap"><table><thead><tr><th>Тендер</th><th>Заказчик</th><th>Цена</th><th>Статус</th><th>Обновлён</th><th></th></tr></thead><tbody id="rows"></tbody></table></div><div id="empty" class="empty hidden"><div class="empty-icon">⌁</div><h3>Ничего не найдено</h3><p>Попробуйте изменить фильтр или создайте новый тендер.</p></div></section>
+</main><div id="toast" class="toast"></div><div id="modal" class="modal hidden"><div class="modal-box"><div id="modal-content"></div></div></div>
+<script src="/static/app.js?v=4"></script>
+</body></html>
