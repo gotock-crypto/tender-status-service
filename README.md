@@ -1,12 +1,15 @@
 # TenderFlow — Tender Status Tracking Service
 
-FastAPI microservice for managing tenders with CRUD operations, manual status changes, and an auditable status history.
+FastAPI microservice for managing tenders with CRUD operations, controlled status changes, and an auditable status history.
 
 ## Test task #6
+
 The service implements:
 - tender creation;
 - tender editing and deletion;
 - tender status changes: `draft` / `active` / `won` / `lost`;
+- explicit status lifecycle: `draft -> active -> won|lost`;
+- terminal statuses (`won`, `lost`) cannot be reopened;
 - status change audit: who, when and why;
 - separate `tender_status_history` table;
 - REST API + responsive web UI;
@@ -39,9 +42,24 @@ Browser / REST client
    SQLite / PostgreSQL
 ```
 
-Status changes and audit records are committed in a single database transaction.
+Status changes and audit records are committed in a single database transaction. The service layer validates every transition before writing either change.
 
 Authentication is intentionally outside the test task. `changed_by` is supplied by the API client; a production system can replace it with the authenticated user identity.
+
+## Status lifecycle
+
+```text
+Черновик (draft)
+       |
+       v
+Активен (active)
+    /       \
+   v         v
+Выигран    Проигран
+ (won)      (lost)
+```
+
+The API rejects invalid transitions with HTTP `409 Conflict`, for example `draft -> won`, `won -> active`, or `lost -> draft`.
 
 ## API
 
@@ -52,6 +70,16 @@ Authentication is intentionally outside the test task. `changed_by` is supplied 
 - `DELETE /api/v1/tenders/{id}`
 - `PATCH /api/v1/tenders/{id}/status`
 - `GET /api/v1/tenders/{id}/history`
+
+### Change status example
+
+```json
+{
+  "status": "active",
+  "changed_by": "ivan.petrov",
+  "reason": "Тендер опубликован заказчиком"
+}
+```
 
 ## Local Windows run
 
@@ -69,7 +97,7 @@ Open:
 - http://127.0.0.1:8000 — web UI
 - http://127.0.0.1:8000/docs — Swagger
 
-The UI supports create, edit, delete, search/filter, manual status changes, audit timeline, and refresh.
+The UI supports create, edit, delete, search/filter, manual status changes, audit timeline, and refresh. Status controls show only valid next states; finished tenders are displayed as terminal.
 
 ## PostgreSQL
 
@@ -96,7 +124,7 @@ docker compose up --build
 
 ## Tests
 
-The test suite covers creation/default draft status, full CRUD, manual status changes, audit history with who/when/why, invalid same-status changes, 404 handling, and UI/static assets.
+The test suite covers creation/default draft status, full CRUD, valid and invalid status transitions, audit history with who/when/why, same-status rejection, 404 handling, and UI/static assets.
 
 ## License
 
